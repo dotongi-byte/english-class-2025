@@ -1,225 +1,288 @@
 import streamlit as st
 from gtts import gTTS
 import io
+import os
 
 # --- 1. 페이지 설정 및 디자인 ---
 st.set_page_config(
-    page_title="Breadinator's Eco Class",
-    page_icon="🤖",
+    page_title="Why Should I Recycle?",
+    page_icon="♻️",
     layout="wide"
 )
 
-# 커스텀 CSS (브레드 이발소 테마 색상 적용)
+# 커스텀 CSS (HTML 파일의 스타일을 Streamlit에 이식)
 st.markdown("""
 <style>
+    /* 전체 폰트 및 배경 설정 */
     .stApp {
-        background-color: #FFF8E1; /* 연한 노랑 배경 */
+        background-color: #F0FDF4; /* 연한 에메랄드색 배경 */
     }
-    .main-header {
-        font-family: 'Helvetica Neue', sans-serif;
-        color: #B45309; /* Amber 700 */
-        text-align: center;
-        font-weight: 800;
-        padding: 20px;
-        background-color: white;
-        border-radius: 20px;
-        border: 3px solid #FCD34D; /* Amber 300 */
-        margin-bottom: 20px;
-    }
-    .character-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 15px;
-        border: 2px solid #FDE68A;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        text-align: center;
-    }
-    .big-emoji {
-        font-size: 60px;
-    }
-    /* 버튼 스타일링 */
-    div.stButton > button {
-        width: 100%;
-        background-color: #F59E0B;
-        color: white;
-        border-radius: 10px;
-        border: none;
-        padding: 10px;
+    
+    /* 윗주(Ruby) 스타일 - 단어 뜻 표시 */
+    ruby { ruby-position: over; }
+    rt { 
+        font-family: 'Gulim', sans-serif; 
+        color: #059669; /* Emerald-600 */
+        font-size: 0.6em; 
         font-weight: bold;
+        transform: translateY(-5px);
     }
-    div.stButton > button:hover {
-        background-color: #D97706;
+    
+    /* 활성화된 문장 (읽고 있는 문장) 스타일 */
+    .active-line {
+        background-color: #FEF3C7; /* 연한 노란색 강조 */
+        border-left: 5px solid #F59E0B;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    .active-text {
+        font-size: 2.2rem; /* 글자 아주 크게 */
+        font-weight: 800;
+        color: #111827;
+        line-height: 1.6;
+        font-family: 'Helvetica', sans-serif;
+    }
+    .active-trans {
+        font-size: 1.4rem;
+        color: #047857;
+        margin-top: 10px;
+        font-weight: 600;
+    }
+
+    /* 비활성화된 문장 스타일 */
+    .inactive-line {
+        padding: 10px 20px;
+        margin-bottom: 10px;
+        opacity: 0.6; /* 흐리게 처리 */
+        border-left: 5px solid transparent;
+    }
+    .inactive-text {
+        font-size: 1.2rem;
+        color: #4B5563;
+    }
+
+    /* 이미지 컨테이너 */
+    .img-container {
+        border-radius: 20px;
+        border: 4px solid #D1FAE5;
+        overflow: hidden;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 데이터 준비 (선생님 HTML 내용 이식) ---
-if 'page' not in st.session_state:
-    st.session_state.page = 'Intro'
+# --- 2. 데이터 준비 (선생님 HTML 내용 완벽 이식) ---
 
-characters = [
-    {"name": "Bread", "role": "Master Barber", "desc": "천재 이발사. 무뚝뚝하지만 의리파!", "icon": "🍞"},
-    {"name": "Wilk", "role": "The Assistant", "desc": "열정 넘치는 직원. 긍정 에너지 뿜뿜!", "icon": "🥛"},
-    {"name": "Choco", "role": "The Cashier", "desc": "시크한 반전 매력의 캐셔.", "icon": "🍫"},
-    {"name": "Breadinator", "role": "Future Robot", "desc": "미래에서 온 환경 지킴이 로봇.", "icon": "🤖"}
-]
+# 단어 데이터 (윗주 달기용)
+vocab_map = {
+    "recycle": "재활용하다", "garbage": "쓰레기", "return": "돌려주다",
+    "used": "사용된", "throw": "버리다", "away": "멀리",
+    "special": "특별한", "cans": "캔", "bottles": "병", "gate": "대문",
+    "explain": "설명하다", "contained": "포함했다", "useful": "유용한",
+    "separate": "분리된", "containers": "용기", "broken": "부서진",
+    "melted": "녹은", "metal": "금속", "shredded": "찢겨진",
+    "comics": "만화책", "waste": "낭비하다", "buried": "묻힌",
+    "dumps": "매립지", "spoil": "망치다", "countryside": "시골",
+    "secondhand": "중고의", "packages": "포장", "compost": "퇴비",
+    "heap": "더미", "nature": "자연", "plastic": "플라스틱"
+}
 
-words = [
-    {"eng": "environment", "kor": "환경", "icon": "🌍", "ex": "We should save the environment."},
-    {"eng": "disposable", "kor": "일회용의", "icon": "🥤", "ex": "Disposable cup should be terminated."},
-    {"eng": "reusable", "kor": "재사용 가능한", "icon": "🥛", "ex": "Switch to reusable."},
-    {"eng": "harmful", "kor": "해로운", "icon": "☠️", "ex": "Emissions can be very harmful."},
-    {"eng": "efficiently", "kor": "효율적으로", "icon": "⚙️", "ex": "Use water more efficiently."},
-    {"eng": "separate", "kor": "분리하다", "icon": "♻️", "ex": "Separate your recyclables."},
-    {"eng": "electricity", "kor": "전기", "icon": "⚡", "ex": "Save electricity."},
-    {"eng": "leftover", "kor": "남은 음식", "icon": "🍱", "ex": "Don't make leftover food."},
-    {"eng": "pollution", "kor": "오염", "icon": "🏭", "ex": "Pollution is very serious."},
-]
-
-quizzes = [
+# 스토리 데이터 (페이지별 이미지와 문장)
+story_data = [
     {
-        "q": "Breadinator sees a disposable cup. What should he do?",
-        "options": ["Use it", "Use a reusable cup", "Throw it away"],
-        "answer": "Use a reusable cup",
-        "tip": "Tip: 'Disposable'은 'Terminated' 되어야 해요!",
-        "icon": "🥤"
+        "img": "1.png", # 이미지 파일명 (images 폴더 내)
+        "lines": [
+            {"eng": "In my family, we recycle our garbage.", "kor": "우리 가족은 쓰레기를 재활용해요."},
+            {"eng": "We return things so they can be used again.", "kor": "우리는 물건들을 돌려줘서 다시 사용할 수 있어요."},
+            {"eng": "We didn't always recycle.", "kor": "우리는 항상 재활용한 것은 아니에요."},
+            {"eng": "We used to throw everything away!", "kor": "우리는 모든 것을 버렸어요!"}
+        ]
     },
     {
-        "q": "It's only a 3-minute walk. How should we go?",
-        "options": ["Take a taxi", "Drive a car", "Walk"],
-        "answer": "Walk",
-        "tip": "Tip: 가까운 거리는 걷는 게 환경에 좋아요.",
-        "icon": "🚶"
+        "img": "2.png",
+        "lines": [
+            {"eng": "On our way to school, we always pass Mr. Jones's house.", "kor": "학교 가는 길에, 우리는 항상 Jones 선생님 집을 지나가요."},
+            {"eng": "Mr. Jones is our teacher.", "kor": "Jones 선생님은 우리 선생님이에요."},
+            {"eng": "One day, we saw him putting a special box with cans, bottles, and papers by the gate.", "kor": "어느 날, 선생님이 문 앞에 캔, 병, 종이가 든 특별한 상자를 두는 것을 봤어요."},
+            {"eng": "\"This box is for recycling. All these things are taken away and used again,\" said Mr. Jones.", "kor": "\"이 상자는 재활용용이야. 이것들은 수거되어 다시 사용된단다,\" 선생님이 말했어요."}
+        ]
     },
     {
-        "q": "Air conditioner uses too much energy. Use this instead:",
-        "options": ["Fan", "Heater", "Open fridge"],
-        "answer": "Fan",
-        "tip": "Tip: 선풍기(Fan)가 전기를 덜 써요.",
-        "icon": "💨"
+        "img": "3.png",
+        "lines": [
+            {"eng": "In class, Mr. Jones asked us what we did with our trash.", "kor": "수업 시간에, 선생님은 우리에게 쓰레기를 어떻게 하는지 물었어요."},
+            {"eng": "\"We put it in the garbage can.\" \"It's just old garbage!\"", "kor": "\"우리는 쓰레기통에 넣어요.\" \"그냥 오래된 쓰레기예요!\""},
+            {"eng": "Mr. Jones said garbage contained lots of useful things that can be recycled, or used again.", "kor": "선생님은 쓰레기에 재활용되거나 다시 쓸 수 있는 유용한 것들이 많다고 말했어요."},
+            {"eng": "\"Why should I recycle?\"", "kor": "\"왜 제가 재활용해야 하나요?\""}
+        ]
+    },
+    {
+        "img": "4.png",
+        "lines": [
+            {"eng": "Mr. Jones took the class to a recycling center.", "kor": "Jones 선생님은 우리 반을 재활용 센터로 데려갔어요."},
+            {"eng": "It had separate containers for bottles, cans, plastic, clothes, and paper.", "kor": "그곳에는 병, 캔, 플라스틱, 옷, 종이를 위한 분리된 용기들이 있었어요."},
+            {"eng": "\"What do you think happens to all the glass that goes in here?\"", "kor": "\"여기에 들어가는 모든 유리가 어떻게 된다고 생각하니?\""},
+            {"eng": "\"It all gets broken down to make new shiny bottles!\"", "kor": "\"전부 분해되어 새로운 반짝이는 병이 돼요!\""}
+        ]
+    },
+    {
+        "img": "5.png",
+        "lines": [
+            {"eng": "\"The paper gets shredded and used to make new books and comics.\"", "kor": "\"종이는 잘게 찢어져서 새로운 책과 만화책을 만드는 데 사용돼요.\""},
+            {"eng": "\"All these things come from garbage we just throw away?\"", "kor": "\"이 모든 것들이 우리가 그냥 버린 쓰레기에서 나온 거예요?\""},
+            {"eng": "\"This plastic can be used to make all kinds of things, including clothes.\"", "kor": "\"이 플라스틱은 옷을 포함한 모든 종류의 것들을 만드는 데 사용될 수 있어요.\""},
+            {"eng": "\"So why waste waste?\"", "kor": "\"그러니 왜 쓰레기를 낭비하나요?\""}
+        ]
+    },
+     {
+        "img": "6.png",
+        "lines": [
+            {"eng": "\"Most of the garbage we put in the trash can gets buried in dumps that spoil the countryside.\"", "kor": "\"쓰레기통에 버린 대부분의 쓰레기는 시골을 망치는 매립지에 묻혀요.\""},
+            {"eng": "\"It's good to recycle as much as you can!\" said Mr. Jones.", "kor": "\"가능한 한 많이 재활용하는 것이 좋아요!\" Jones 선생님이 말했어요."},
+            {"eng": "\"So what else can we recycle?\"", "kor": "\"그럼 우리가 또 무엇을 재활용할 수 있나요?\""},
+            {"eng": "\"Clothes, books, and toys that you don't want can all be taken to the secondhand store.\"", "kor": "\"원하지 않는 옷, 책, 장난감은 모두 중고 가게로 가져갈 수 있어요.\""}
+        ]
     }
 ]
 
-# --- 3. 기능 함수 (TTS) ---
+# --- 3. 함수 정의 ---
+
 def play_tts(text):
-    """구글 TTS를 이용해 즉석에서 음성을 만들고 재생합니다."""
+    """gTTS로 음성 생성 및 재생"""
     try:
         tts = gTTS(text=text, lang='en')
         audio_fp = io.BytesIO()
         tts.write_to_fp(audio_fp)
         st.audio(audio_fp, format='audio/mp3', start_time=0)
     except Exception as e:
-        st.error("음성 재생 중 오류가 발생했습니다.")
+        st.error("음성 재생 오류")
 
-# --- 4. 사이드바 네비게이션 ---
+def annotate_text(text):
+    """영어 문장의 단어를 확인하여 윗주(Ruby) HTML 태그를 입힘"""
+    words = text.split(' ')
+    annotated_html = ""
+    for word in words:
+        # 구두점 제거하고 소문자로 단어 확인
+        clean_word = word.lower().replace('.', '').replace(',', '').replace('"', '').replace('?', '').replace('!', '')
+        if clean_word in vocab_map:
+            meaning = vocab_map[clean_word]
+            # HTML Ruby 태그 적용
+            annotated_html += f"<ruby>{word}<rt>{meaning}</rt></ruby> "
+        else:
+            annotated_html += f"{word} "
+    return annotated_html
+
+# --- 4. 세션 상태 관리 (현재 페이지, 현재 문장) ---
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = 0
+if 'current_line' not in st.session_state:
+    st.session_state.current_line = 0
+
+# --- 5. UI 구성 ---
+
+# 사이드바 (페이지 이동)
 with st.sidebar:
-    st.title("🤖 메뉴")
-    selection = st.radio("Go to", ["Intro", "Word Study", "Pattern Drill", "Video", "Quiz"])
-
-# --- 5. 메인 화면 구성 ---
-
-if selection == "Intro":
-    st.markdown('<div class="main-header"><h1>Lesson 11. We Should Save the Earth</h1></div>', unsafe_allow_html=True)
+    st.title("📚 책장 넘기기")
     
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbm90eW54M3Y4Z3Y4Z3Y4Z3Y4Z3Y4Z3Y4Z3Y4/3o7TKSjRrfIPjeiVyM/giphy.gif", caption="Save the Earth!") # 환경 관련 움짤 예시
-    with col2:
-        st.markdown("### 🤖 Breadinator's Eco Class")
-        st.info("오늘 에피소드에는 미래에서 온 로봇 **Breadinator**가 등장합니다! 환경 오염으로 파괴된 미래를 막기 위해 과거로 왔어요.")
+    # 페이지 이동 버튼
+    col_prev, col_next = st.columns(2)
+    with col_prev:
+        if st.button("⬅️ 이전 쪽"):
+            if st.session_state.current_page > 0:
+                st.session_state.current_page -= 1
+                st.session_state.current_line = 0
+                st.rerun()
+    with col_next:
+        if st.button("다음 쪽 ➡️"):
+            if st.session_state.current_page < len(story_data) - 1:
+                st.session_state.current_page += 1
+                st.session_state.current_line = 0
+                st.rerun()
 
     st.markdown("---")
-    st.markdown("### ✨ Today's Characters")
+    st.info(f"현재 페이지: {st.session_state.current_page + 1} / {len(story_data)}")
     
-    cols = st.columns(4)
-    for idx, char in enumerate(characters):
-        with cols[idx]:
+    # 전체 초기화
+    if st.button("🔄 처음으로 돌아가기"):
+        st.session_state.current_page = 0
+        st.session_state.current_line = 0
+        st.rerun()
+
+# 메인 화면
+page_data = story_data[st.session_state.current_page]
+
+# 1) 상단: 이미지 표시
+col_img, col_text = st.columns([1, 1])
+
+with col_img:
+    st.markdown('<div class="img-container">', unsafe_allow_html=True)
+    # 이미지가 있으면 표시, 없으면 안내 문구
+    image_path = f"images/{page_data['img']}"
+    if os.path.exists(image_path):
+        st.image(image_path, use_container_width=True)
+    else:
+        st.warning(f"⚠️ 이미지를 찾을 수 없습니다.\n\n'{image_path}' 위치에 파일을 넣어주세요.")
+        # 임시 플레이스홀더 이미지 (테스트용)
+        st.image("https://via.placeholder.com/600x400?text=Please+Upload+Image", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# 2) 하단(또는 우측): 텍스트 및 컨트롤
+with col_text:
+    st.title(f"Page {st.session_state.current_page + 1}")
+    
+    # 문장 네비게이션 (재생 컨트롤)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c1:
+        if st.button("🔼 이전 문장"):
+            if st.session_state.current_line > 0:
+                st.session_state.current_line -= 1
+                st.rerun()
+    with c3:
+        if st.button("다음 문장 🔽"):
+            if st.session_state.current_line < len(page_data['lines']) - 1:
+                st.session_state.current_line += 1
+                st.rerun()
+    
+    st.markdown("---")
+
+    # 문장 출력 루프
+    for idx, line in enumerate(page_data['lines']):
+        is_active = (idx == st.session_state.current_line)
+        
+        # HTML 생성 (Ruby 태그 포함)
+        ruby_text = annotate_text(line['eng'])
+        
+        if is_active:
+            # 활성화된 문장 (크고 강조됨, 음영 처리)
             st.markdown(f"""
-            <div class="character-card">
-                <div class="big-emoji">{char['icon']}</div>
-                <h3>{char['name']}</h3>
-                <p>{char['role']}</p>
-                <small>{char['desc']}</small>
+            <div class="active-line">
+                <div class="active-text">{ruby_text}</div>
+                <div class="active-trans">{line['kor']}</div>
             </div>
             """, unsafe_allow_html=True)
-
-elif selection == "Word Study":
-    st.markdown('<div class="main-header"><h2>📚 Word Study</h2></div>', unsafe_allow_html=True)
-    
-    # 단어 선택
-    word_idx = st.slider("단어를 선택하세요", 0, len(words)-1, 0)
-    current_word = words[word_idx]
-
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.markdown(f'<div style="font-size: 150px; text-align: center;">{current_word["icon"]}</div>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"# {current_word['eng']}")
-        
-        # 발음 듣기 버튼
-        if st.button("🔊 발음 & 예문 듣기"):
-            play_tts(f"{current_word['eng']}. {current_word['ex']}")
             
-        with st.expander("의미 확인하기 (Click)", expanded=False):
-            st.markdown(f"## {current_word['kor']}")
-            st.success(f"Example: {current_word['ex']}")
-
-elif selection == "Pattern Drill":
-    st.markdown('<div class="main-header"><h2>🗣️ Pattern Drill</h2></div>', unsafe_allow_html=True)
-    
-    st.markdown("### 🎬 Scene 1: The Disposable Cup")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.warning("Before (문제 상황)")
-        st.markdown("**Breadinator:** Disposable cup should be terminated.")
-        st.markdown("(일회용 컵은 제거되어야 해.)")
-        if st.button("🔊 Listen (Robot)"):
-            play_tts("Disposable cup should be terminated.")
-
-    with col2:
-        st.success("After (올바른 행동)")
-        st.markdown("**Correction:** We should use **reusable cups**.")
-        st.markdown("(우리는 재사용 컵을 써야 해요.)")
-        if st.button("🔊 Listen (Correct)"):
-            play_tts("We should use reusable cups.")
+            # 자동 재생 (현재 활성화된 문장만 읽기)
+            # 매번 리로드될 때마다 읽으면 시끄러울 수 있으므로, 
+            # '듣기' 버튼을 눌렀을 때만 읽게 하거나, 아래 주석을 풀면 자동 재생됩니다.
+            # play_tts(line['eng']) 
             
-    st.divider()
-    
-    st.markdown("### 🎬 Scene 2: Delivery Food")
-    st.markdown("> **Problem:** Too much trash from delivery.")
-    
-    # 변환 연습
-    if st.button("✨ 문장 바꾸기 (Transform!)"):
-        st.balloons()
-        st.markdown("## 👉 How about cooking homemade meals?")
-        play_tts("How about cooking homemade meals?")
-    else:
-        st.markdown("## 👉 How about __________________?")
+            # 수동 듣기 버튼
+            if st.button("🔊 소리 듣기", key=f"btn_{st.session_state.current_page}_{idx}"):
+                play_tts(line['eng'])
 
-elif selection == "Video":
-    st.markdown('<div class="main-header"><h2>📺 Video Time</h2></div>', unsafe_allow_html=True)
-    # 유튜브 영상 (브레드 이발소 관련 영상이나 환경 관련 영상 링크로 교체 가능)
-    st.video("https://www.youtube.com/watch?v=M7lc1UVf-VE") 
-    st.info("영상을 보고 나서 퀴즈를 풀어봅시다!")
-
-elif selection == "Quiz":
-    st.markdown('<div class="main-header"><h2>🧩 Pop Quiz</h2></div>', unsafe_allow_html=True)
-    
-    for i, q in enumerate(quizzes):
-        st.markdown(f"### Q{i+1}. {q['q']}")
-        st.write(f"Situation: {q['icon']}")
-        
-        answer = st.radio(f"Select answer for Q{i+1}", q['options'], key=f"q{i}")
-        
-        if st.button(f"Submit Q{i+1}"):
-            if answer == q['answer']:
-                st.balloons()
-                st.success("Ding Dong Dang! Correct!")
-                play_tts("Great job!")
-            else:
-                st.error("Try again!")
-                st.info(q['tip'])
-        st.divider()
+        else:
+            # 비활성화된 문장 (작고 흐림)
+            # 클릭하면 해당 문장으로 이동하는 로직은 Streamlit 구조상 버튼으로 구현해야 함
+            if st.button(f"{line['eng'][:20]}...", key=f"nav_{st.session_state.current_page}_{idx}", help="이 문장으로 이동"):
+                 st.session_state.current_line = idx
+                 st.rerun()
+                 
+            st.markdown(f"""
+            <div class="inactive-line">
+                <div class="inactive-text">{line['eng']}</div>
+            </div>
+            """, unsafe_allow_html=True)
